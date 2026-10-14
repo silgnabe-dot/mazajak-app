@@ -1,0 +1,63 @@
+name: Build Mazajak Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'START_NOW_ULTIMATE_FINAL.zip'
+      - '.github/workflows/android.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Unzip app project
+        run: |
+          unzip -q START_NOW_ULTIMATE_FINAL.zip -d project
+          echo "Project files:"
+          find project -maxdepth 4 -type f | head -100
+
+      - name: Locate Android project
+        run: |
+          PROJECT_DIR="$(find project -type f -name settings.gradle.kts -print -quit | xargs -r dirname)"
+          if [ -z "$PROJECT_DIR" ]; then
+            PROJECT_DIR="$(find project -type f -name settings.gradle -print -quit | xargs -r dirname)"
+          fi
+          if [ -z "$PROJECT_DIR" ]; then
+            echo 'ERROR: No Android Gradle project found in the ZIP.'
+            exit 1
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          chmod +x gradlew 2>/dev/null || true
+          if [ -f gradlew ]; then
+            ./gradlew assembleDebug --no-daemon
+          else
+            echo 'ERROR: Gradle wrapper (gradlew) is missing. The project needs a Gradle wrapper before it can build.'
+            exit 1
+          fi
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mazajak-debug-apk
+          path: '**/build/outputs/apk/debug/*.apk'
+          if-no-files-found: error
